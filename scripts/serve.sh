@@ -27,7 +27,7 @@ DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ensure_venv "$DEMO_DIR"
 
 : "${BACKEND_PORT:=8000}"
-: "${FRONTEND_PORT:=3000}"
+: "${FRONTEND_PORT:=3002}"
 : "${STUDIO_DIR:=$DEMO_DIR/vendor/image-studio}"
 
 # ── platform check ──
@@ -118,6 +118,15 @@ case "$OS" in
             err "no transformer-gemlite-* subdir found under $_ternary_dir"
             err "download the model first: ./scripts/download_model.sh ternary"
             exit 1
+        fi
+
+        # Set fallback paths for the optional variant if it is missing, so that
+        # backend_gpu's pipeline initialization doesn't throw a ValueError.
+        if [ -z "$_ternary_transformer" ]; then
+            _ternary_transformer="$_ternary_dir/transformer-gemlite-int2"
+        fi
+        if [ -z "$_binary_transformer" ]; then
+            _binary_transformer="$_binary_dir/transformer-gemlite-int1"
         fi
         ;;
 esac
