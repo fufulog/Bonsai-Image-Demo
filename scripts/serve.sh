@@ -149,17 +149,27 @@ fi
 # child process spawned by npm (next-server, etc.) also resolves to the
 # bundled node — keeps the toolchain self-contained.
 VENV_BIN="$DEMO_DIR/.venv/bin"
-if [ ! -x "$VENV_BIN/npm" ]; then
-    err "Bundled npm not found at $VENV_BIN/npm — did setup.sh run successfully?"
-    echo "       Try: uv sync"
-    exit 1
+NPM_PATH="$VENV_BIN"
+
+if [ ! -x "$VENV_BIN/npm" ] || [ ! -x "$VENV_BIN/node" ]; then
+    # Bundled node/npm is not executable or broken (e.g. if the repo was moved).
+    # Fall back to the system node and npm on the main partition.
+    SYS_NPM="$(command -v npm 2>/dev/null || true)"
+    SYS_NODE="$(command -v node 2>/dev/null || true)"
+    if [ -n "$SYS_NPM" ] && [ -n "$SYS_NODE" ]; then
+        NPM_PATH="$(dirname "$SYS_NPM")"
+        info "Bundled node/npm not found or broken. Using npm from main partition: $SYS_NPM"
+    else
+        err "Bundled npm not found at $VENV_BIN/npm and system npm/node is not available on PATH."
+        exit 1
+    fi
 fi
 
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
     _pkg_cutoff="$(package_cutoff_date)"
     step "Installing frontend dependencies (first run, versions <= $_pkg_cutoff)..."
     (cd "$FRONTEND_DIR" \
-        && PATH="$VENV_BIN:$PATH" \
+        && PATH="$NPM_PATH:$PATH" \
            npm install --no-audit --no-fund --before "$_pkg_cutoff")
 fi
 
@@ -187,7 +197,7 @@ if [ "$OS" = "Linux" ]; then
                MFLUX_STUDIO_GPU_TEXT_ENCODER_PATH="$_model_dir/text_encoder-hqq-4bit" \
                MFLUX_STUDIO_GPU_VAE_PATH="$_model_dir/vae" \
                MFLUX_STUDIO_GPU_TOKENIZER_PATH="$_model_dir/text_encoder-hqq-4bit/tokenizer" \
-               "$DEMO_DIR/.venv/bin/uvicorn" "$_backend_module" \
+               "$DEMO_DIR/.venv/bin/python" -m uvicorn "$_backend_module" \
                    --port "$BACKEND_PORT" \
                    > "$BACKEND_LOG" 2>&1) &
     BACKEND_PID=$!
@@ -214,7 +224,7 @@ else
     MFLUX_STUDIO_BAKED_BINARY_MODEL_PATH="$DEMO_DIR/models/bonsai-image-4B-binary-mlx" \
     MFLUX_STUDIO_TE_4BIT=true \
     MFLUX_STUDIO_FORCE_DISABLE_GPU=true \
-        "$DEMO_DIR/.venv/bin/uvicorn" "$_backend_module" \
+        "$DEMO_DIR/.venv/bin/python" -m uvicorn "$_backend_module" \
             --port "$BACKEND_PORT" \
             > "$BACKEND_LOG" 2>&1 &
     BACKEND_PID=$!
@@ -229,7 +239,7 @@ if [ "${BONSAI_FRONTEND_PROD:-0}" = "1" ]; then
     if [ ! -d "$FRONTEND_DIR/.next" ]; then
         step "Building frontend (production, BONSAI_FRONTEND_PROD=1) — first run only ..."
         (cd "$FRONTEND_DIR" \
-            && PATH="$VENV_BIN:$PATH" \
+            && PATH="$NPM_PATH:$PATH" \
                NEXT_PUBLIC_BACKEND_URL="http://127.0.0.1:$BACKEND_PORT" \
                npm run build) || {
             err "frontend build failed — check $FRONTEND_LOG"
@@ -249,7 +259,7 @@ echo "       logs: $FRONTEND_LOG"
 # (app/api/*/route.ts) so they hit the right port when BACKEND_PORT is
 # overridden — defaults baked in those files target :8000.
 (cd "$FRONTEND_DIR" \
-    && PATH="$VENV_BIN:$PATH" \
+    && PATH="$NPM_PATH:$PATH" \
        PORT="$FRONTEND_PORT" \
        NEXT_PUBLIC_BACKEND_URL="http://127.0.0.1:$BACKEND_PORT" \
        $_frontend_cmd) > "$FRONTEND_LOG" 2>&1 &

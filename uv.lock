@@ -12,7 +12,6 @@ resolution-markers = [
 
 [options]
 prerelease-mode = "allow"
-exclude-newer = "2026-05-26T04:00:00Z"
 
 [[package]]
 name = "accelerate"
