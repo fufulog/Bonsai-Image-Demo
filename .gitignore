@@ -35,6 +35,5 @@ outputs/
 .serve-logs/
 
 # deps cloned by setup.sh
-vendor/
 
 .claude
